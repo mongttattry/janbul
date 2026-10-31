@@ -1,0 +1,67 @@
+rules_version = '2';
+// 잔불 — Firestore 보안 규칙
+// 콘솔 > Firestore Database > 규칙 탭에 전체를 붙여 넣고 '게시'
+// 숨김 기준 3 은 main.js 의 CONFIG.stars.hideAfterReports 와 같게 맞출 것
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function me() { return request.auth.uid; }
+    function onlyChanged(keys) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys); }
+    function starPath(sid) { return /databases/$(database)/documents/stars/$(sid); }
+    function heartPath(sid) { return /databases/$(database)/documents/stars/$(sid)/hearts/$(me()); }
+    function reportPath(sid) { return /databases/$(database)/documents/stars/$(sid)/reports/$(me()); }
+
+    // 도배 방지: 다짐은 한 사람당 30초에 하나
+    match /users/{uid} {
+      allow read: if signedIn() && me() == uid;
+      allow create: if signedIn() && me() == uid
+        && request.resource.data.keys().hasOnly(['lastPost'])
+        && request.resource.data.lastPost == request.time;
+      allow update: if signedIn() && me() == uid
+        && request.resource.data.keys().hasOnly(['lastPost'])
+        && request.resource.data.lastPost == request.time
+        && resource.data.lastPost < request.time - duration.value(30, 's');
+    }
+
+    match /stars/{sid} {
+      // 숨김 안 된 별은 누구나, 숨김된 별은 쓴 사람만
+      allow read: if resource.data.hidden == false || (signedIn() && resource.data.uid == me());
+
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['text', 'uid', 'hearts', 'reports', 'hidden', 'createdAt'])
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0 && request.resource.data.text.size() <= 50
+        && request.resource.data.uid == me()
+        && request.resource.data.hearts == 0 && request.resource.data.reports == 0
+        && request.resource.data.hidden == false
+        && request.resource.data.createdAt == request.time
+        && getAfter(/databases/$(database)/documents/users/$(me())).data.lastPost == request.time;
+
+      allow update: if signedIn() && (
+        // 온기 +1 : 내 하트 문서가 새로 생길 때만
+        (onlyChanged(['hearts']) && request.resource.data.hearts == resource.data.hearts + 1
+          && !exists(heartPath(sid)) && existsAfter(heartPath(sid)))
+        // 온기 -1 : 내 하트 문서가 지워질 때만
+        || (onlyChanged(['hearts']) && request.resource.data.hearts == resource.data.hearts - 1
+          && exists(heartPath(sid)) && !existsAfter(heartPath(sid)))
+        // 신고 +1 : 한 사람당 한 번, 3 이상이면 숨김
+        || (onlyChanged(['reports', 'hidden']) && request.resource.data.reports == resource.data.reports + 1
+          && request.resource.data.hidden == (request.resource.data.reports >= 3)
+          && !exists(reportPath(sid)) && existsAfter(reportPath(sid)))
+      );
+
+      match /hearts/{uid} {
+        allow read: if signedIn() && me() == uid;
+        allow create: if signedIn() && me() == uid
+          && getAfter(starPath(sid)).data.hearts == get(starPath(sid)).data.hearts + 1;
+        allow delete: if signedIn() && me() == uid
+          && getAfter(starPath(sid)).data.hearts == get(starPath(sid)).data.hearts - 1;
+      }
+
+      match /reports/{uid} {
+        allow create: if signedIn() && me() == uid
+          && getAfter(starPath(sid)).data.reports == get(starPath(sid)).data.reports + 1;
+      }
+    }
+  }
+}

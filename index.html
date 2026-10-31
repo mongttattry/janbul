@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>잔불</title>
+<meta name="description" content="엔플라잉 '잔불'을 듣는 밤, 모닥불에 고민을 태우고 다짐을 별로 띄우는 비공식 팬 메이드 웹앱">
+<meta name="theme-color" content="#01081c">
+<meta property="og:type" content="website">
+<meta property="og:title" content="잔불 (Still) — 비공식 팬 메이드">
+<meta property="og:description" content="불이 작아진 것뿐, 우린 여전히 타고 있다">
+<meta property="og:image" content="https://mongttattry.github.io/janbul/assets/og.png">
+<meta property="og:url" content="https://mongttattry.github.io/janbul/">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="assets/favicon.png">
+<link rel="apple-touch-icon" href="assets/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Noto+Sans+KR:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="app">
+  <div id="frame">
+    <div id="stage">
+      <div id="world">
+        <!-- 인트로 (월드 좌표 y: -731 ~ 941) — 아래쪽 941px이 베이스캠프 하늘과 겹침 -->
+        <section id="introBlock" aria-label="인트로">
+          <div id="introText">
+            <p class="slogan">불이 작아진 것뿐,<br>우린 여전히 타고 있다</p>
+            <h1 class="title"><span>잔불</span></h1>
+            <p class="subtitle">Still - N.Flying</p>
+          </div>
+          <p id="loadHint" aria-live="polite">불씨를 모으는 중 <b id="loadPct">0%</b></p>
+          <p id="touchHint">화면을 터치해 불씨를 만드세요</p>
+        </section>
+
+        <!-- 베이스캠프 (월드 좌표 y: 0 ~ 1672) -->
+        <section id="scene" aria-label="베이스캠프">
+          <img id="bg" src="assets/bg.webp" alt="">
+          <img id="bg2" class="bgLayer" src="assets/bg2.webp" alt="" onerror="this.remove()">
+          <img id="bg3" class="bgLayer" src="assets/bg3.webp" alt="" onerror="this.remove()">
+          <div id="sunset"></div>
+          <canvas id="sway" aria-hidden="true"></canvas>
+          <div id="stars"></div>
+          <div id="members"></div>
+          <button id="fireHit" aria-label="모닥불 터치"></button>
+          <img id="fireHint" src="assets/ui-fire-hint.png" alt="모닥불을 눌러보세요">
+        </section>
+      </div>
+    </div>
+
+    <canvas id="fx"></canvas>
+
+    <!-- 고정 UI -->
+    <div id="ui" class="hidden">
+      <a id="listenBtn" class="imgBtn" target="_blank" rel="noopener"><img src="assets/ui-mv.png" alt="N.Flying - 잔불 공식 뮤비 보러 가기"></a>
+      <button id="muteBtn" class="imgBtn" aria-label="소리 끄기"><img src="assets/ui-sound.png" alt=""><span class="slash" aria-hidden="true"></span></button>
+      <div id="tempBadge"><span class="thermo" aria-hidden="true"><img class="th-empty" src="assets/thermo-empty.png" alt=""><img class="th-fill" src="assets/thermo-fill.png" alt=""><img class="th-line" src="assets/thermo-line.png" alt=""><img class="th-deco" src="assets/thermo-cool.png" alt=""></span><b id="tempVal">30°C</b><span id="tempRate" data-dir="flat">–</span><span id="tempFloats" aria-hidden="true"></span></div>
+      <button id="cardBtn" class="imgBtn" hidden><img src="assets/ui-cardbtn.png" alt=""><span>불씨 카드</span></button>
+      <button id="woodBtn" class="imgBtn" aria-label="장작 넣기"><img src="assets/ui-wood.png" alt=""></button>
+      <p id="notice">비공식 팬 메이드</p>
+    </div>
+
+    <!-- 별빛 팝업 -->
+    <div id="starPop" hidden>
+      <button class="x" data-close aria-label="닫기">×</button>
+      <h3><span class="miniStar" aria-hidden="true"></span>누군가의 뜨거운 잔불</h3>
+      <p id="starText"></p>
+      <button id="heartBtn" aria-pressed="false"><img src="assets/ui-flame.png" alt=""><span>온기 더하기</span><span id="heartCount">0</span></button>
+      <button id="reportBtn" type="button" aria-label="이 별 신고하기">신고</button>
+    </div>
+
+    <!-- 장작 넣기 모달 -->
+    <div id="woodDim" aria-hidden="true"></div>
+    <div id="woodModal" class="overlay" hidden>
+      <form id="woodForm" class="modal" novalidate>
+        <button type="button" class="x" data-close aria-label="닫기">×</button>
+        <div class="mHead"><img src="assets/ui-flame-big.png" alt=""><h2>장작 넣기</h2></div>
+        <p class="sub">오늘, 어떤 마음을 놓고 갈까요?</p>
+        <div class="modes" role="radiogroup" aria-label="모드">
+          <button type="button" class="mode" data-mode="burn" role="radio" aria-checked="false">
+            <img class="ico" src="assets/ico-burn.png" alt=""><b>태워버릴 고민</b><i>Burn Out</i><small>고민은 재가 되어 사라져요</small>
+          </button>
+          <button type="button" class="mode on" data-mode="dream" role="radio" aria-checked="true">
+            <img class="ico" src="assets/ico-dream.png" alt=""><b>지펴낼 다짐</b><i>Still Burning</i><small>다짐은 밤하늘의 별빛으로</small>
+          </button>
+        </div>
+        <div class="labelRow"><label id="inputLabel" for="woodInput">나의 다짐·소원·응원</label><span id="modeNote">따뜻한 마음을 모두와 나눠요</span><span id="formErr" role="alert"></span></div>
+        <div class="inputWrap"><textarea id="woodInput" maxlength="50" rows="3" placeholder="내가 좋아하는 일을 끝까지 해볼래요."></textarea></div>
+        <button id="submitBtn" type="submit"><span>불씨로 띄우기</span></button>
+      </form>
+    </div>
+
+    <!-- 마음 카드 (시안 941×1672 좌표, 장면과 같은 배율로 겹침) -->
+    <div id="cardModal" hidden>
+      <div id="cardLayer">
+        <div id="cardBadge" role="img" aria-label="잔불 온도"><img id="cardBadgeImg" src="assets/card-badge.png" alt=""><span id="cardBadgeTemp"></span></div>
+        <img id="cardImg" alt="오늘의 마음 카드">
+        <button id="saveBtn" class="cardBtn"><img src="assets/card-save.png" alt=""><span>이미지 저장</span></button>
+        <button id="shareBtn" class="cardBtn"><img src="assets/card-share.png" alt=""><span>공유하기</span></button>
+        <a id="cardListen" class="cardLink" target="_blank" rel="noopener">원곡 들으러 가기</a>
+        <button class="cardLink" data-close>모닥불로 돌아가기</button>
+      </div>
+    </div>
+
+    <!-- 앱 안 브라우저용: 카드 이미지를 길게 눌러 저장 -->
+    <div id="pressSave" hidden><img alt="불씨 카드 이미지"><p>이미지를 길게 눌러 저장해 주세요<br><small>화면을 누르면 닫혀요</small></p></div>
+
+    <div id="toast" role="status" aria-live="polite"></div>
+  </div>
+</div>
+
+<audio id="bgm" src="assets/bgm.mp3" loop preload="none"></audio>
+<script src="main.js"></script>
+</body>
+</html>

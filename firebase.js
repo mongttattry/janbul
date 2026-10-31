@@ -18,15 +18,18 @@ export async function createDB(config, opt) {
   const stars = fs.collection(db, 'stars');
   const starRef = id => fs.doc(db, 'stars', id);
   const toStar = d => ({ id: d.id, text: d.data().text, hearts: d.data().hearts || 0 });
-  const mineQuery = n => fs.query(stars, fs.where('uid', '==', uid), fs.orderBy('createdAt', 'desc'), fs.limit(n));
+  // 색인을 따로 만들지 않아도 되게: 단일 조건 쿼리만 쓰고 정렬·걸러내기는 여기서 함
+  const mineQuery = () => fs.query(stars, fs.where('uid', '==', uid));
+  const ms = d => d.data().createdAt?.toMillis?.() || 0;
+  const latestMine = (snap, n) => snap.docs.sort((a, b) => ms(b) - ms(a)).slice(0, n);
 
   return {
     mode: 'firebase',
 
     // 최근 다짐 (숨김 제외)
     async fetchPool() {
-      const q = fs.query(stars, fs.where('hidden', '==', false), fs.orderBy('createdAt', 'desc'), fs.limit(opt.poolSize));
-      return (await fs.getDocs(q)).docs.map(toStar);
+      const q = fs.query(stars, fs.orderBy('createdAt', 'desc'), fs.limit(opt.poolSize + 50));
+      return (await fs.getDocs(q)).docs.filter(d => !d.data().hidden).slice(0, opt.poolSize).map(toStar);
     },
 
     // 다짐 올리기 — 같은 사람은 30초에 한 번 (users/{uid}.lastPost 로 규칙에서 검사)
@@ -59,14 +62,14 @@ export async function createDB(config, opt) {
 
     // 내 별들의 온기 수 { id: n }
     async getHearts() {
-      const snap = await fs.getDocs(mineQuery(opt.watchMine));
-      return Object.fromEntries(snap.docs.map(d => [d.id, d.data().hearts || 0]));
+      const snap = await fs.getDocs(mineQuery());
+      return Object.fromEntries(latestMine(snap, opt.watchMine).map(d => [d.id, d.data().hearts || 0]));
     },
 
     // 내 별 온기 실시간 — 바뀔 때마다 cb({ id: n }), 반환값은 구독 해제 함수
     watchHearts(_ids, cb) {
-      return fs.onSnapshot(mineQuery(opt.watchMine),
-        snap => cb(Object.fromEntries(snap.docs.map(d => [d.id, d.data().hearts || 0]))),
+      return fs.onSnapshot(mineQuery(),
+        snap => cb(Object.fromEntries(latestMine(snap, opt.watchMine).map(d => [d.id, d.data().hearts || 0]))),
         err => console.warn('[잔불] 온기 실시간 끊김', err));
     },
   };

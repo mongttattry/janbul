@@ -135,8 +135,14 @@
   const cvsTop = document.createElement('canvas'); cvsTop.id = 'fxTop'; cvsTop.setAttribute('aria-hidden', 'true');
   const ctxTop = cvsTop.getContext('2d');
   let s = .5, offX = 0, offY = 0, fw = 0, fh = 0, dpr = 1;
+  // 안드로이드는 키보드가 올라오면 화면 높이 자체가 줄어듦 → 그대로 다시 맞추면 앱 전체가 쪼그라듦
+  //  입력 중에 높이만 줄어든 경우엔 크기를 그대로 두고, 키보드 처리는 onViewport가 맡음
+  let baseH = 0;
+  const typing = () => document.activeElement && document.activeElement.tagName === 'TEXTAREA';
   function layout() {
     const vw = window.innerWidth, vh = window.innerHeight;
+    if (typing() && fw && Math.abs(vw - fw) < 2 && vh < baseH - 80) return;
+    baseH = vh;
     const wide = vw / vh > 0.75;
     fw = wide ? Math.round(vh * W / H) : vw;
     fh = vh;
@@ -892,21 +898,21 @@
   const setDim = on => { $('#woodDim').classList.toggle('show', on); app.classList.toggle('dim', on); };
   function closeWood(keepDim = false) {
     input.blur(); woodModal.classList.remove('show'); if (!keepDim) setDim(false);
-    clearTimeout(woodHideT); woodHideT = setTimeout(() => { woodModal.hidden = true; woodModal.classList.remove('kb'); }, 460);
+    clearTimeout(woodHideT); woodHideT = setTimeout(() => { woodModal.hidden = true; woodModal.classList.remove('kb'); frame.classList.remove('kbOpen'); }, 460);
   }
 
   // 키보드가 올라오면 입력창+버튼을 키보드 위로
   const vv = window.visualViewport;
   function onViewport() {
     if (!vv || woodModal.hidden) return;
-    const kb = vv.height < window.innerHeight - 120;
-    woodModal.classList.toggle('kb', kb);
+    const kb = typing() && vv.height < Math.max(window.innerHeight, baseH) - 120;
+    woodModal.classList.toggle('kb', kb); frame.classList.toggle('kbOpen', kb); // 키보드 떠 있는 동안 아래 버튼들 숨김
     woodModal.style.setProperty('--kbTop', (vv.offsetTop + 10) + 'px');
     if (kb) woodModal.style.height = vv.height + vv.offsetTop + 'px'; else woodModal.style.height = '';
   }
   vv?.addEventListener('resize', onViewport); vv?.addEventListener('scroll', onViewport);
   input.addEventListener('focus', () => setTimeout(onViewport, 300));
-  input.addEventListener('blur', () => setTimeout(onViewport, 200));
+  input.addEventListener('blur', () => setTimeout(() => { onViewport(); layout(); }, 250)); // 키보드 내려가면 원래 크기로
 
   woodForm.addEventListener('submit', e => {
     e.preventDefault();
@@ -1032,17 +1038,18 @@
     const songs = LYRICS.filter(t => t.lines.length);
     const song = songs.length ? pick(songs) : null;
     cardSong = song;
-    if (song) { // 구분선(y≈780)과 출처(y 908) 사이: 가사 + 그 아래 작은 곡 제목
-      const ly = pick(song.lines), n = ly.length;
-      let lfs = n >= 3 ? 18 : n === 2 ? 25 : 29;
-      const q = ly.map((t, i) => (i === 0 ? '“' : '') + t + (i === n - 1 ? '”' : ''));
-      for (; lfs > 14; lfs--) { x.font = `700 ${lfs}px ${disp}`; ls(-lfs * .02); if (Math.max(...q.map(t => x.measureText(t).width)) <= 560) break; } // 긴 줄은 카드 폭에 맞춰 줄임
-      const llh = lfs * (n >= 3 ? 1.24 : 1.32), titleY = 880, last = titleY - 22 - lfs * .4;
-      x.fillStyle = '#b5561c';
-      q.forEach((t, i) => x.fillText(t, 467, last - (n - 1 - i) * llh));
-      x.fillStyle = '#b08458'; x.font = `400 17px ${disp}`; ls(0); x.fillText(`— ${song.song}`, 467, titleY);
+    if (song) { // 구분선(y≈780)과 출처(y 908) 사이에 가사 한 줄 — 길면 글자를 줄여 카드 폭에 맞춤
+      const t = '“' + pick(song.lines).join(' ') + '”';
+      let lfs = 30;
+      for (; lfs > 16; lfs--) { x.font = `700 ${lfs}px ${disp}`; ls(-lfs * .02); if (x.measureText(t).width <= 600) break; }
+      x.fillStyle = '#b5561c'; x.fillText(t, 467, 846);
     }
-    x.textAlign = 'left'; x.fillStyle = '#a08a74'; x.font = `400 19px ${disp}`; ls(0); x.fillText(song ? 'Still - N.Flying' : '잔불 (Still) - N.Flying', 388, 908);
+    // 출처: 곡 제목 - N.Flying (오른쪽 '원곡 들으러 가기'와 겹치지 않게 폭에 맞춰 줄임)
+    x.textAlign = 'left'; x.fillStyle = '#a08a74'; ls(0);
+    let credit = `${song ? song.song : '잔불'} - N.Flying`, cfs = 19;
+    const fitC = () => { for (cfs = 19; cfs > 13; cfs--) { x.font = `400 ${cfs}px ${disp}`; if (x.measureText(credit).width <= 195) return true; } return false; };
+    if (!fitC() && song) { credit = song.song; fitC(); }
+    x.fillText(credit, 388, 908);
     $('#cardListen').href = song?.url || MV;
     cardPaper = c;
     cardImg.src = c.toDataURL('image/png');

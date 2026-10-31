@@ -18,6 +18,7 @@
 }
 [hidden] { display: none !important; }
 html, body { height: 100%; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; } /* 안드로이드·카톡 글자 자동 확대 방지 */
 body { margin: 0; background: var(--night); color: var(--ink); font-family: var(--font-body); overflow: hidden; -webkit-tap-highlight-color: transparent; }
 button, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
@@ -245,6 +246,7 @@ button { cursor: pointer; }
 #submitBtn:focus-visible, .mode:focus-visible { outline: 2px solid var(--ember-hot); outline-offset: 3px; border-radius: calc(var(--u) * 24px); }
 /* 키보드가 올라오면: 위쪽에 붙고, 카드는 접어서 입력창과 버튼만 */
 #woodModal.kb { align-items: flex-start; }
+#frame.kbOpen #ui { visibility: hidden; }
 #woodModal.kb .modal { margin-top: var(--kbTop, 12px); height: calc(var(--u) * 560px); background: rgba(0, 4, 34, .9); border: calc(var(--u) * 3px) solid #ffc04d; border-radius: calc(var(--u) * 40px); box-shadow: 0 0 calc(var(--u) * 24px) rgba(255, 170, 60, .5); }
 #woodModal.kb .mHead, #woodModal.kb .sub, #woodModal.kb .ico, #woodModal.kb .mode i, #woodModal.kb .mode small { display: none; }
 #woodModal.kb .modes { top: calc(var(--u) * 36px); left: calc(var(--u) * 48px); gap: calc(var(--u) * 20px); }

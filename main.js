@@ -51,7 +51,14 @@
     GA_ID: 'G-VQRB6FSD5N',
     GA_HOST: 'mongttattry.github.io', // 이 주소에서 열렸을 때만 통계 전송 (내 컴퓨터·미리보기 방문은 빼기)
     // Firebase 설정값 — 콘솔 > 프로젝트 설정 > 내 앱 > SDK 설정의 firebaseConfig를 그대로 붙여 넣기. 비워 두면 이 기기 안에서만 동작
-    firebase: null,
+    firebase: {
+      apiKey: 'AIzaSyATb9g988YE17FGg5s2Gx0CMf-xboE_no4',
+      authDomain: 'janbul-81a90.firebaseapp.com',
+      projectId: 'janbul-81a90',
+      storageBucket: 'janbul-81a90.firebasestorage.app',
+      messagingSenderId: '611362406867',
+      appId: '1:611362406867:web:83f15dc458793677b62f26',
+    },
     stars: { poolSize: 100, refreshMs: 180000, hideAfterReports: 3, heartNoticeMs: 30000, watchMine: 10 }, // hideAfterReports는 firestore.rules 숫자와 같게
     sway: { enabled: false, top: 1340, fadeTo: 1450, amp: 2.6 }, // 근경 풀 흔들림 — 풀만 분리한 레이어 받으면 다시 켬
     // 멤버 대사 (자리 순서: 이승협, 차훈, 김재현, 유회승, 서동성) 
@@ -689,10 +696,21 @@
     watchHearts() { return () => {}; }, // 로컬은 다른 사람이 없으니 실시간 알림 없음
   };
   let DB = localDB;
+  // 응답이 없으면 기다리다 멈추지 않게 시간 제한
+  const timeout = (p, ms, what) => Promise.race([p, new Promise((_, no) => setTimeout(() => no(new Error(what + ' 시간 초과')), ms))]);
+  // 문제 확인용: 주소 끝에 ?debug 를 붙이면 화면 아래에 연결 상태가 뜸
+  const DEBUG = /[?&]debug/.test(location.search), dbg = { mode: 'local', errors: [] };
+  const logErr = (where, err) => { console.warn('[잔불] ' + where, err); dbg.errors.push(where + ': ' + (err?.code || '') + ' ' + (err?.message || err)); showDbg(); };
+  function showDbg() {
+    if (!DEBUG) return;
+    let el = document.getElementById('dbgBox');
+    if (!el) { el = document.createElement('pre'); el.id = 'dbgBox'; el.style.cssText = 'position:fixed;left:6px;right:6px;bottom:6px;z-index:99999;max-height:45%;overflow:auto;margin:0;padding:8px;background:rgba(0,0,0,.85);color:#9f9;font:11px/1.4 monospace;white-space:pre-wrap;border-radius:6px'; document.body.appendChild(el); }
+    el.textContent = `연결: ${dbg.mode}\n하늘 풀: ${pool.length}개 · 떠 있는 별: ${shown.size}개 · 내 별 기록: ${myStars.length}개\n` + (dbg.errors.length ? '오류:\n' + dbg.errors.join('\n') : '오류 없음');
+  }
   const dbReady = (async () => {
     if (!CONFIG.firebase?.apiKey) return;
-    try { const m = await import('./firebase.js'); DB = await m.createDB(CONFIG.firebase, CONFIG.stars); }
-    catch (err) { console.warn('[잔불] Firebase 연결 실패 → 이 기기 안에서만 동작', err); DB = localDB; }
+    try { const m = await timeout(import('./firebase.js'), 10000, '연결 파일'); DB = await timeout(m.createDB(CONFIG.firebase, CONFIG.stars), 12000, 'Firebase 로그인'); dbg.mode = 'firebase'; }
+    catch (err) { logErr('Firebase 연결 실패 → 이 기기 안에서만 동작', err); DB = localDB; dbg.mode = 'local (연결 실패)'; }
   })();
 
   // 예전 버전 데이터 옮기기 (stars 안의 mine/hearted 표시 → myStars / hearted)
@@ -763,12 +781,13 @@
   }
   async function refreshPool() {
     try {
-      const list = await DB.fetchPool();
+      const list = await timeout(DB.fetchPool(), 12000, '별 목록');
       pool = list.filter(st => !reported.has(st.id)).map(keep);
       if (openStar) $('#heartCount').textContent = openStar.hearts || 0;
-    } catch (err) { console.warn('[잔불] 별 목록을 못 불러옴', err); }
+    } catch (err) { logErr('별 목록을 못 불러옴', err); }
+    showDbg();
   }
-  dbReady.then(refreshPool).then(fillSky);
+  dbReady.then(refreshPool).then(fillSky).then(showDbg);
   setInterval(rotateSky, SKY.rotateMs);
   setInterval(() => { if (!document.hidden) refreshPool(); }, CONFIG.stars.refreshMs);
   function pickStarPos() {
@@ -817,7 +836,7 @@
     st.hearts = Math.max(0, (st.hearts || 0) + (on ? 1 : -1));
     $('#heartCount').textContent = st.hearts; $('#heartBtn').classList.toggle('done', on);
     $('#heartBtn').setAttribute('aria-pressed', on);
-    DB.setHeart(st.id, on).catch(err => console.warn('[잔불] 온기 저장 실패', err));
+    DB.setHeart(st.id, on).catch(err => logErr('온기 저장 실패', err));
     track(on ? 'heart_on' : 'heart_off');
   });
   // 신고: 한 번 누르면 '신고할까요?'로 바뀌고, 한 번 더 누르면 신고 (브라우저 확인창은 쓰지 않음)
@@ -825,7 +844,7 @@
     e.stopPropagation(); if (!openStar) return;
     if (!reportBtn.classList.contains('confirm')) { reportBtn.classList.add('confirm'); reportBtn.textContent = '신고할까요?'; return; }
     const st = openStar; reported.add(st.id); store.set('reported', [...reported]);
-    DB.report(st.id).catch(err => console.warn('[잔불] 신고 저장 실패', err));
+    DB.report(st.id).catch(err => logErr('신고 저장 실패', err));
     starPop.hidden = true; openStar = null;
     const rec = shown.get(st.id); if (rec) fadeOut(rec);
     pool = pool.filter(o => o !== st);
@@ -861,7 +880,7 @@
   let stopWatch = () => {};
   async function watchMyHearts() {
     const ids = myStars.slice(-CONFIG.stars.watchMine).map(m => m.id); if (!ids.length) return;
-    try { noteHearts(await DB.getHearts(ids)); } catch { /* 오프라인 */ }
+    try { noteHearts(await DB.getHearts(ids)); } catch (err) { logErr('내 별 온기 확인 실패', err); }
     stopWatch(); stopWatch = DB.watchHearts(ids, map => noteHearts(map));
   }
 
@@ -973,7 +992,7 @@
         { transform: 'translateY(-300px) scale(.08) rotate(0)', opacity: 0 },
       ], { duration: 1500, easing: 'ease-in', fill: 'forwards' }).finished.then(() => new Promise(done => {
         paper.remove(); sfx.star();
-        const pos = pickStarPos(), saving = DB.addStar(text).catch(err => { console.warn('[잔불] 다짐 저장 실패', err); return null; });
+        const pos = pickStarPos(), saving = timeout(DB.addStar(text), 10000, '다짐 저장').catch(err => { logErr('다짐 저장 실패', err); return null; });
         burst(f.x, f.y - 120, 16, .5);
         add({ k: 'dream', sx: f.x, sy: f.y - 120, tx: pos.x, ty: pos.y, max: 210, done: () => saving.then(saved => {
           const st = keep(saved || { id: 'tmp' + Date.now(), text, hearts: 0 });
@@ -1117,11 +1136,21 @@
       toast('저장되었습니다');
     } catch { toast('저장에 실패했습니다'); }
   });
+  // 공유하기: 사이트 주소를 복사 (카톡·인스타 안 브라우저는 공유 시트가 안 떠서 복사가 가장 확실함)
+  const SITE_URL = 'https://mongttattry.github.io/janbul/';
+  async function copyText(t) {
+    try { await navigator.clipboard.writeText(t); return true; } catch { /* 권한 없음 → 아래 방식 */ }
+    try {
+      const ta = document.createElement('textarea'); ta.value = t; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+      document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, t.length);
+      const ok = document.execCommand('copy'); ta.remove(); return ok;
+    } catch { return false; }
+  }
   $('#shareBtn').addEventListener('click', async () => {
     track('card_share');
-    const data = { title: '잔불', text: '불이 작아진 것뿐, 우린 여전히 타고 있다', url: location.href };
-    try { if (navigator.share) { await navigator.share(data); return; } } catch { return; }
-    try { await navigator.clipboard.writeText(location.href); toast('링크를 복사했어요'); } catch { toast('주소창의 링크를 복사해 공유해 주세요'); }
+    const url = location.hostname.endsWith('github.io') ? SITE_URL : location.href.split('#')[0];
+    if (await copyText(url)) toast('링크를 복사했어요\n원하는 곳에 붙여 넣어 공유해 주세요');
+    else toast('주소창의 링크를 복사해 공유해 주세요\n' + url);
   });
 
   // ───────────── 원곡 링크 ─────────────
